@@ -1,17 +1,10 @@
 # Changelog
 
-## 0.4.0
-- Added Redis-backed download job queue and status/cancel API.
-- Added worker for downloading media from direct Telegram message links that the logged-in account can already access.
-- Added FloodWait-aware retry and protected-message refusal.
-- No automatic group/channel joining, bot handoff traversal, membership-gate bypass, or protected-content extraction.
-
-## 0.3.0
-- Added allow-listed Telegram admin bot.
-- Added `/start`, `/help`, `/admin`, and `/status`.
-
-## 0.2.0
-- Added Telethon session management and protected local API.
+## 0.6.0
+- Added Telegram join-chain traversal and invite-link handling (`t.me/+...`, `joinchat`).
+- Added automatic temporary membership management and post-download auto-leave functionality.
+- Added support for intermediary sponsor bot inline buttons and verification callbacks.
+- Enhanced FloodWait reporting and retry management.
 
 ## 0.5.0
 - Added admin-bot link submission, per-admin daily quotas, and request history.
