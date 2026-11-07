@@ -5,27 +5,34 @@ cd "$DIR"
 case "${1:-help}" in
  status) docker compose ps ;;
  restart) docker compose restart ;;
- update) git pull --ff-only && docker compose up -d --build ;;
+ update)
+   [[ $EUID -eq 0 ]] || { echo "Run as root: sudo $DIR/fuckjoin update" >&2; exit 1; }
+   bash "$DIR/scripts/update.sh"
+   ;;
  backup)
-   mkdir -p backups
+   mkdir -p "$DIR/backups"
    stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-   docker compose exec -T db pg_dump -U fuckjoin fuckjoin > "backups/db-${stamp}.sql"
-   echo "Database backup saved: backups/db-${stamp}.sql"
+   docker compose exec -T db pg_dump -U fuckjoin -d fuckjoin --no-owner --no-acl > "$DIR/backups/db-${stamp}.sql"
+   test -s "$DIR/backups/db-${stamp}.sql" || { rm -f "$DIR/backups/db-${stamp}.sql"; echo "Backup failed or was empty" >&2; exit 1; }
+   chmod 600 "$DIR/backups/db-${stamp}.sql"
+   echo "Database backup saved: $DIR/backups/db-${stamp}.sql"
    ;;
  restore)
-   [[ -n "${2:-}" && -f "$2" ]] || { echo "Usage: ./fuckjoin restore /path/to/database.sql"; exit 2; }
-   read -r -p "This imports data into the current database. Continue? [y/N]: " ok
+   [[ -n "${2:-}" && -f "$2" ]] || { echo "Usage: $0 restore /path/to/database.sql"; exit 2; }
+   echo "WARNING: importing SQL may overwrite current database objects."
+   read -r -p "Continue? [y/N]: " ok
    [[ "$ok" =~ ^[Yy]$ ]] || exit 0
-   docker compose exec -T db psql -U fuckjoin -d fuckjoin < "$2"
+   docker compose exec -T db psql -v ON_ERROR_STOP=1 --single-transaction -U fuckjoin -d fuckjoin < "$2"
    ;;
  logs) docker compose logs -f --tail=200 ;;
  uninstall)
-   read -r -p "Stop and remove containers? Data is preserved. [y/N]: " ok
+   [[ $EUID -eq 0 ]] || { echo "Run as root: sudo $DIR/fuckjoin uninstall" >&2; exit 1; }
+   read -r -p "Stop and remove containers? Persistent data is preserved. [y/N]: " ok
    [[ "$ok" =~ ^[Yy]$ ]] || exit 0
    docker compose down
    read -r -p "Permanently delete database/Redis volumes too? [y/N]: " del
    if [[ "$del" =~ ^[Yy]$ ]]; then docker compose down -v; fi
-   echo "Containers removed; project files and .env preserved."
+   echo "Containers removed; project files, .env and backups preserved."
    ;;
- *) echo "Usage: ./fuckjoin {status|restart|update|backup|restore FILE|logs|uninstall}" ;;
+ *) echo "Usage: $0 {status|restart|update|backup|restore FILE|logs|uninstall}" ;;
 esac
