@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$DIR"
+case "${1:-help}" in
+ status) docker compose ps ;;
+ restart) docker compose restart ;;
+ update) git pull --ff-only && docker compose up -d --build ;;
+ backup)
+   mkdir -p backups
+   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+   docker compose exec -T db pg_dump -U fuckjoin fuckjoin > "backups/db-${stamp}.sql"
+   echo "Database backup saved: backups/db-${stamp}.sql"
+   ;;
+ restore)
+   [[ -n "${2:-}" && -f "$2" ]] || { echo "Usage: ./fuckjoin restore /path/to/database.sql"; exit 2; }
+   read -r -p "This imports data into the current database. Continue? [y/N]: " ok
+   [[ "$ok" =~ ^[Yy]$ ]] || exit 0
+   docker compose exec -T db psql -U fuckjoin -d fuckjoin < "$2"
+   ;;
+ logs) docker compose logs -f --tail=200 ;;
+ uninstall)
+   read -r -p "Stop and remove containers? Data is preserved. [y/N]: " ok
+   [[ "$ok" =~ ^[Yy]$ ]] || exit 0
+   docker compose down
+   read -r -p "Permanently delete database/Redis volumes too? [y/N]: " del
+   if [[ "$del" =~ ^[Yy]$ ]]; then docker compose down -v; fi
+   echo "Containers removed; project files and .env preserved."
+   ;;
+ *) echo "Usage: ./fuckjoin {status|restart|update|backup|restore FILE|logs|uninstall}" ;;
+esac
