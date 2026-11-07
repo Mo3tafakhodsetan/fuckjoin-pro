@@ -4,6 +4,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
+RUN mkdir -p /data && chown -R 10001:10001 /data
 USER 10001:10001
 EXPOSE 8787
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8787"]

@@ -5,6 +5,8 @@ services:
     env_file: .env
     ports:
       - "127.0.0.1:${APP_PORT:-8787}:8787"
+    volumes:
+      - telegram_sessions:/data
     depends_on:
       db:
         condition: service_healthy
@@ -46,6 +48,7 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  telegram_sessions:
 networks:
   internal:
     driver: bridge

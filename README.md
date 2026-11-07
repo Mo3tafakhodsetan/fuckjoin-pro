@@ -1,37 +1,62 @@
 # FuckJoin Pro
 
-Standalone self-hosted foundation for Telegram automation management.
+Self-hosted Telegram automation foundation. **Release: v0.5.0 — admin quotas and request history.**
 
-**Release status: v0.1.1 installer hardening.** This release includes a self-contained
-Ubuntu installer, Docker Compose deployment, FastAPI health/API service, PostgreSQL and
-Redis. The original project's complete Telegram/Telethon workflow, bot, worker and web
-dashboard are not yet ported. No Telegram login or channel/media actions are performed yet.
+This release retains the v0.2.0 FastAPI + Telethon session engine and adds an allow-listed Telegram Bot API control bot. The admin bot supports `/start`, `/help`, `/admin`, and `/status`. It does not expose login codes, 2FA passwords, session strings, or arbitrary account actions.
 
-## One-command install
+This release adds a Redis-backed worker for direct media message links in chats the logged-in account can already access. It does not automatically join groups/channels, follow bot handoffs, bypass membership gates, or extract protected content.
 
-Run on a fresh Ubuntu 22.04/24.04 server as root:
+## Install
+
+On a fresh Ubuntu 22.04/24.04 server as root:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/Mo3tafakhodsetan/fuckjoin-pro/main/install.sh)
 ```
 
-The installer downloads the repository archive itself, so it does not depend on sibling
-files being present beside `install.sh`. It checks OS/architecture, warns about low RAM or
-disk, installs Docker Engine/Compose if missing, prompts for Telegram credentials, generates
-secrets, writes `.env` with mode 0600, starts services and waits for `/health`.
-
-You can leave Telegram credentials blank during this foundation release. API ID and API Hash
-must be entered together. Existing `.env` is preserved during reinstall/update.
+The installer deploys Docker Compose, asks for a Telegram Bot Token, Telegram API ID/API Hash, and numeric admin Telegram ID(s). The admin bot starts only when both a valid bot token and at least one admin ID are configured. Telegram API ID and API Hash must be supplied together. Existing `.env` is preserved on reinstall/update.
 
 ## Services and security
 
-- FastAPI: bound to `127.0.0.1` on port 8787 by default (`/health`, `/api/v1`, `/docs`)
-- PostgreSQL 16 and Redis 7: persistent Docker volumes
-- `.env`: mode 0600; contains generated application/database secrets
+- FastAPI is bound to `127.0.0.1:8787` by default.
+- PostgreSQL 16 and Redis 7 use persistent Docker volumes.
+- `.env` is written with mode `0600`.
+- Telegram session data is stored in a dedicated Docker volume with owner-only file permissions.
+- Session API endpoints require `X-App-Secret` and should remain localhost-only.
+- The admin bot uses a numeric Telegram user-ID allowlist. Unauthorized users receive no administrative data.
+- Never share the bot token, `APP_SECRET`, Telegram login code, 2FA password, or session file.
 
-**Important:** The API currently has no authentication. Do not expose it publicly or proxy it
-to the internet. Telegram credentials are collected for later integration only; this release
-does not log in to Telegram.
+## Admin bot commands
+
+- `/start` or `/help` — help
+- `/admin` — administrative command summary
+- `/status` — Telethon session configuration, connection, and authorization status
+
+Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_IDS` in `.env`, then run:
+
+```bash
+sudo /opt/fuckjoin-pro/fuckjoin restart
+sudo /opt/fuckjoin-pro/fuckjoin logs
+```
+
+`TELEGRAM_ADMIN_IDS` accepts comma-separated numeric Telegram user IDs. Do not use usernames as an access-control identifier.
+
+## Protected local session API
+
+All endpoints require `X-App-Secret: <APP_SECRET>`:
+
+- `GET /api/v1/telegram/session`
+- `POST /api/v1/telegram/login/send-code` with `{"phone":"+..."}`
+- `POST /api/v1/telegram/login/verify` with `{"code":"12345"}`
+- If Telegram requests 2-step verification, repeat `/login/verify` with `{"code":"12345","password":"..."}`
+- `POST /api/v1/telegram/logout`
+
+Example (run on the server; do not paste secrets into shared chats):
+
+```bash
+APP_SECRET="$(grep '^APP_SECRET=' .env | cut -d= -f2- | tr -d '\"')"
+curl -sS -H "X-App-Secret: $APP_SECRET" http://127.0.0.1:8787/api/v1/telegram/session
+```
 
 ## Management
 
@@ -45,18 +70,44 @@ sudo /opt/fuckjoin-pro/fuckjoin logs
 sudo /opt/fuckjoin-pro/fuckjoin uninstall
 ```
 
-The updater downloads the current `main` branch archive and preserves `.env`, backups and
-Docker volumes. It stores a copy of `.env` in `backups/` before replacing application files.
-Database backup currently exports PostgreSQL only. Uninstall preserves volumes by default and
-asks separately before deleting them.
+## Development roadmap
 
-## Next development milestones
+1. Port and regression-test the original project's deep-link resolver and media workflow.
+2. Add Redis-backed job queue, worker lifecycle, cancellation, and FloodWait-aware retry handling.
+3. Add per-user authorization, quotas, audit events, and safe concurrency limits.
+4. Add a bilingual Persian/English dashboard.
+5. Add TLS guidance, scheduled backup validation, and signed/release-based updates.
 
-1. Port and regression-test the upstream deep-link/media workflow.
-2. Add isolated Telethon session lifecycle, safe cleanup and FloodWait-aware worker.
-3. Add multi-user authorization, quotas, job queue and cancellation.
-4. Add authenticated bilingual Persian/English dashboard and bot.
-5. Add TLS, scheduled backups, restore validation and release-based updater.
+Review the upstream repository's license and preserve required notices before redistributing upstream source. This scaffold does not claim feature parity with the upstream project.
 
-Review the upstream repository's license and preserve required notices before redistributing
-any upstream source. This initial scaffold is independently authored.
+
+## Download jobs (v0.4.0)
+
+Create a job using the local API (only allow-listed admin IDs may be target chats):
+
+```bash
+curl -sS -X POST http://127.0.0.1:8787/api/v1/jobs \
+  -H "X-App-Secret: $APP_SECRET" -H 'Content-Type: application/json' \
+  -d '{"message_url":"https://t.me/example/123","chat_id":123456789}'
+```
+
+- `GET /api/v1/jobs/{job_id}` checks status.
+- `DELETE /api/v1/jobs/{job_id}` requests cancellation.
+- The account must already have access to the source chat.
+- Only direct `t.me/<username>/<message_id>` or `t.me/c/<channel_id>/<message_id>` links are accepted.
+- Media is delivered to the allow-listed admin's private chat and the temporary local file is deleted.
+- Telegram protected-content messages are refused.
+- FloodWait is respected; retry is delayed instead of repeatedly hitting Telegram.
+
+Set the `APP_SECRET` shell variable as shown in the protected API section above before using the example.
+
+
+### Version 0.5.0 — admin usage controls
+
+- Send a supported direct `https://t.me/<username>/<message_id>` or `https://t.me/c/<channel_id>/<message_id>` link to the admin bot.
+- `/quota` shows today's UTC request count and configured daily limit.
+- `/history` lists the latest 10 requests for the calling admin.
+- Set `DAILY_JOB_LIMIT` in `.env` (default: `20`).
+- Job metadata and user history are retained in Redis for up to 30 days.
+
+Only allow-listed admin IDs can submit jobs. The logged-in Telegram account must already have legitimate access to the chat. Protected content is not bypassed.

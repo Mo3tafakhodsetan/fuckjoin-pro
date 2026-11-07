@@ -96,7 +96,7 @@ chmod +x install.sh fuckjoin scripts/update.sh 2>/dev/null || true
 if [[ -f .env ]]; then
   say "Existing configuration detected; keeping it unchanged"
 else
-  say "Telegram setup (credentials can be left blank; Telegram engine is not integrated yet)"
+  say "Telegram setup (Bot Token and numeric admin ID enable the admin bot)"
   read -r -s -p "Telegram Bot Token (optional): " BOT_TOKEN; echo
   read -r -p "Telegram API ID (optional): " API_ID
   read -r -s -p "Telegram API Hash (optional): " API_HASH; echo
@@ -142,7 +142,7 @@ if (( healthy )); then
   echo "API: http://127.0.0.1:${PORT}"
   echo "Health: /health"
   echo "Management: $PROJECT_DIR/fuckjoin"
-  echo "Security: API has no authentication yet; keep it bound to localhost."
+  echo "Security: Telegram API endpoints require X-App-Secret; keep API bound to localhost."
 else
   docker compose logs --tail=80 || true
   die "Health check failed. Run: cd '$PROJECT_DIR' && ./fuckjoin logs"

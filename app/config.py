@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     telegram_api_id: str = ""
     telegram_api_hash: str = ""
     telegram_admin_ids: str = ""
+    daily_job_limit: int = 20
+    telegram_session_path: str = "/data/telegram.session"
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()
